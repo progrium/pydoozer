@@ -10,8 +10,6 @@ from msg_pb2 import Response
 from msg_pb2 import Request
 
 CONNECT_TIMEOUT = 10
-RESPONSE_VALID = 1
-RESPONSE_DONE = 2
 DEFAULT_URI = "doozerd:?%s" % "&".join([
     "ca=127.0.0.1:8046",
     "ca=127.0.0.1:8041",
