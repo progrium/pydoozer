@@ -8,8 +8,8 @@ Still quite early.
 
 ## Contributors
 
-Jeff Lindsay <progrium@twilio.com>
-Neuman Vong <neuman@twilio.com>
+ * Jeff Lindsay <progrium@twilio.com>
+ * Neuman Vong <neuman@twilio.com>
 
 ## Todo
 
