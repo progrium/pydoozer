@@ -6,15 +6,19 @@ A Python client for [Doozer](https://github.com/ha/doozer) using gevent.
 
 Still quite early.
 
-## Contributors
-
- * Jeff Lindsay <progrium@twilio.com>
- * Neuman Vong <neuman@twilio.com>
-
 ## Todo
 
  * Resend on disconnect, with idempotency safety for set/del
  * Entity class to wrap Response objects about entities
  * Finish watch, access support
- * setup.py, tests, docs
+ * tests, docs
  * Make work with standard python as well as gevent
+
+## Contributors
+
+ * Jeff Lindsay <progrium@twilio.com>
+ * Neuman Vong <neuman@twilio.com>
+
+## License
+
+MIT
