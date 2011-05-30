@@ -2,9 +2,9 @@ import os
 import sys
 sys.path.append(os.path.dirname(__file__) + "/..")
 
-import doozer
+import doozerd
 
-client = doozer.connect()
+client = doozerd.connect()
 
 rev = client.set("/foo", "test", 0).rev
 print "Setting /foo to test with rev %s" % rev
