@@ -1,6 +1,6 @@
-# PyDoozerd
+# PyDoozer
 
-A Python client for [Doozerd](https://github.com/ha/doozerd) using gevent. 
+A Python client for [Doozer](https://github.com/ha/doozerd) using gevent. 
 
 ## Status
 
