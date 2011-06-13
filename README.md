@@ -8,7 +8,6 @@ Still quite early.
 
 ## Todo
 
- * Resend on disconnect, with idempotency safety for set/del
  * Entity class to wrap Response objects about entities
  * Finish watch, access support
  * tests, docs
