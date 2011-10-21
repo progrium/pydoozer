@@ -41,7 +41,7 @@ class DoozerData():
 
     def watch(self):
         """
-        whatch the directory path for changes.
+        watch the directory path for changes.
         call callback on change.
         """
 
@@ -171,7 +171,6 @@ def test_doozerdata():
     #create a second client
 
     client2 = doozer.connect()
-    print client, client2
     d2 = DoozerData(client2, callback=print_change)
     d2.set('foo4', 'bar4')
     #let the second client change values to
@@ -199,6 +198,7 @@ def test_doozerdata():
     for dii in d2.items():
         print dii
     # there is content. in both instances.
+    # because the change_value job adds data later..
     cv.join(cv)
     d.delete_all()
 
