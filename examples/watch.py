@@ -11,16 +11,22 @@ client = doozer.connect()
 rev = client.rev().rev
 
 def watch_test(rev):
-    try:
-        hmmz = client.wait("/watch", rev+1)
-    except Timeout, t:
-        print t
-        watch_test(rev)
-        return
-    print hmmz.rev, hmmz.value
-    watch_test(hmmz.rev+1)
+    while True:
+        try:
+            change = client.wait("/watch", rev)
+        except Timeout, t:
+            print t
+            rev = rev+1
+            watch_test(rev)
+            change = None
+            return
 
-watch_job = gevent.spawn(watch_test, rev)
+        if change:
+            print change.rev, change.value
+
+            rev = change.rev+1
+
+watch_job = gevent.spawn(watch_test, rev+1)
 
 for i in range(10):
     gevent.sleep(1)

@@ -18,16 +18,18 @@ for node in walk:
 rev = client.set("/foo/bar", "test", 0).rev
 
 def watch_test(rev):
-    try:
-        hmmz = client.wait("/foo/**", rev )
-        print "saw change at %s with %s" % ( hmmz.rev, hmmz.value)
-        watch_test(hmmz.rev+1)
-    except Timeout, t:
-        print t
-        watch_test(rev)
+    while True:
+        try:
+            change = client.wait("/foo/**", rev )
+            print "saw change at %s with %s" % ( change.rev, change.value)
+            rev = change.rev+1
+        except Timeout, t:
+            change = None
+            print t
+            rev =+1
 
 #spawn the process that watches the foo dir for changes.
-watch_job = gevent.spawn(watch_test, rev)
+watch_job = gevent.spawn(watch_test, rev+1)
 
 #add new data in foo
 for i in range(10):
