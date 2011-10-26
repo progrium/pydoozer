@@ -26,7 +26,8 @@ def watch_test(rev):
         except Timeout, t:
             change = None
             print t
-            rev =+1
+            rev = client.rev().rev
+            #rev =+1
 
 #spawn the process that watches the foo dir for changes.
 watch_job = gevent.spawn(watch_test, rev+1)

@@ -14,17 +14,12 @@ def watch_test(rev):
     while True:
         try:
             change = client.wait("/watch", rev)
+            print change.rev, change.value
+            rev = change.rev+1
         except Timeout, t:
             print t
-            rev = rev+1
-            watch_test(rev)
+            rev = client.rev().rev
             change = None
-            return
-
-        if change:
-            print change.rev, change.value
-
-            rev = change.rev+1
 
 watch_job = gevent.spawn(watch_test, rev+1)
 

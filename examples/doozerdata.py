@@ -19,8 +19,6 @@ class DoozerData():
 
     on initialization a path/folder can be specified where all keys
     will be stored.
-
-    
     """
 
     def __init__(self, client, callback=None, path='/pydooz'):
@@ -30,13 +28,10 @@ class DoozerData():
         #method called when external source changes value.
         self.callback = callback
 
-        try:
-            self.pathrev = client.set('%s%s' % (path, '/doozerdata'), 'this is python data', 0).rev
-        except RevMismatch:
-            # datapath already exists in doozer.
-            # load rev values.
-            for path, rev, _ in self.items():
-                self.revisions[path] = rev
+        #load existing values.
+        walk = client.walk('%s/**' % path)
+        for file in walk:
+            self.revisions[self.key_path(file.path)] = file.rev
 
         #start watching for changes.
         if self.callback:
@@ -60,12 +55,13 @@ class DoozerData():
                 try:
                     change = self.client.wait("%s/**" % self._folder, rev)
                 except Timeout:
-                    rev +=1
+                    rev = self.client.rev().rev
                     change = None
 
                 if change:
                     self._handle_change(change)
                     rev = change.rev+1
+                #print '.....', rev
 
         self.watchjob = gevent.spawn(watchjob, rev)
 
@@ -76,14 +72,11 @@ class DoozerData():
         #get the last part of the path.
         key_path = self.key_path(change.path)
 
-        print 'handle change', self.revisions.get(key_path, 0), change.rev 
-        print change
-        print self.revisions, key_path
-
+        print 'handle change', self.revisions.get(key_path, 0), change.rev
 
         if self._old_or_delete(key_path, change):
             return
-        
+
         print change.path
         self.revisions[key_path] = change.rev
         #create or update route.
@@ -92,7 +85,7 @@ class DoozerData():
             self.callback(change.value)
             return
 
-        print 'i could get here ...if i saw my own delete.'
+        print 'i could get here ...if i saw my own/old delete.'
         print change
 
     def _old_or_delete(self, key_path, change):
@@ -107,10 +100,11 @@ class DoozerData():
                 return True
             #check if it is an delete action.
             #if key_path is still in revisions it is not our
-            #own delete action.
+            #own or old delete action.
             if change.flags == 8:
                 print 'got delete!!'
-                self.callback(change.value, route_id=key_path, destroy=True)
+                self.revisions.pop(key_path)
+                self.callback(change.value, path=key_path, destroy=True)
                 return True
 
         return False
@@ -205,9 +199,9 @@ class DoozerData():
             yield (thing.path, item.rev, item.value)
 
 
-def print_change(change, destroy=True):
+def print_change(change, path=None, destroy=True):
     print 'watched a change..'
-    print  change, destroy
+    print  change, destroy, path
 
 def change_value(d):
 
@@ -258,8 +252,8 @@ def test_doozerdata():
     # there is content. in both instances.
     # because the change_value job adds data later.
     cv.join(cv)
-    d.delete_all()
+    #d.delete_all()
 
-if __name__ == '__main__': 
+if __name__ == '__main__':
     test_doozerdata()
 
