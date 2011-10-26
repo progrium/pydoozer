@@ -4,7 +4,7 @@ created by stephan preeker. 2011-10
 import doozer
 import gevent
 
-from doozer.client import RevMismatch, TooLate, NoEntity
+from doozer.client import RevMismatch, TooLate, NoEntity, BadPath
 from gevent import Timeout
 
 class DoozerData():
@@ -15,10 +15,12 @@ class DoozerData():
 
     -all values need to be strings.
     -we watch changes to values.
-        in case of a update we call the provided callback method.
+        in case of a update we call the provided callback method with value.
 
     on initialization a path/folder can be specified where all keys
     will be stored.
+
+    
     """
 
     def __init__(self, client, callback=None, path='/pydooz'):
@@ -37,49 +39,103 @@ class DoozerData():
                 self.revisions[path] = rev
 
         #start watching for changes.
-        self.watch()
+        if self.callback:
+            self.watch()
 
     def watch(self):
         """
         watch the directory path for changes.
         call callback on change.
+        do NOT call callback if it is a change of our own,
+        thus when the revision is the same as the rev we have
+        stored in out revisions.
         """
 
         rev =  self.client.rev().rev
 
         def watchjob(rev):
-            try:
-                change = self.client.wait("%s/**" % self._folder, rev)
+            change = None
+
+            while True:
+                try:
+                    change = self.client.wait("%s/**" % self._folder, rev)
+                except Timeout:
+                    rev +=1
+                    change = None
+
                 if change:
-                    self.revisions[change.path] = change.rev
-                if self.callback and change and change.flags == 4:
-                    self.callback(change)
-                elif change and change.flags == 8:
-                    self.revisions.pop(change.path)
-                watchjob(rev+1)
-            except Timeout:
-                return watchjob(rev+1)
+                    self._handle_change(change)
+                    rev = change.rev+1
 
         self.watchjob = gevent.spawn(watchjob, rev)
 
-    def get(self, path):
-        """get the path.."""
-        #get the local revision number
-        #what if revision revnumber do not match??
-        #   -SUCCEED and update rev number.
-        #return the doozer data
+    def _handle_change(self, change):
+        """
+        A change has been watched. deal with it.
+        """
+        #get the last part of the path.
+        key_path = self.key_path(change.path)
+
+        print 'handle change', self.revisions.get(key_path, 0), change.rev 
+        print change
+        print self.revisions, key_path
+
+
+        if self._old_or_delete(key_path, change):
+            return
+        
+        print change.path
+        self.revisions[key_path] = change.rev
+        #create or update route.
+        if change.flags == 4:
+            self.revisions[key_path] = change.rev
+            self.callback(change.value)
+            return
+
+        print 'i could get here ...if i saw my own delete.'
+        print change
+
+    def _old_or_delete(self, key_path, change):
+        """
+        If the change is done by ourselves or already seen
+        we don't have to do a thing.
+        if change is a delete not from outselves call the callback.
+        """
+        if key_path in self.revisions:
+            #check if we already have this change.
+            if self.revisions[key_path] == change.rev:
+                return True
+            #check if it is an delete action.
+            #if key_path is still in revisions it is not our
+            #own delete action.
+            if change.flags == 8:
+                print 'got delete!!'
+                self.callback(change.value, route_id=key_path, destroy=True)
+                return True
+
+        return False
+
+    def get(self, key_path):
+        """
+        get the latest data for path.
+
+        get the local revision number
+        if revision revnumber does not match??
+           -SUCCEED and update rev number.
+        return the doozer data
+        """
         rev = 0
-        if path in self.revisions:
-            rev = self.revisions[path]
+        if key_path in self.revisions:
+            rev = self.revisions[key_path]
         try:
-            return self.client.get(self.folder(path), rev).value
+            return self.client.get(self.folder(key_path), rev).value
         except RevMismatch:
             print 'revision mismach..'
-            item = self.client.get(self.folder(path))
-            self.revisions[path] = item.rev
+            item = self.client.get(self.folder(key_path))
+            self.revisions[key_path] = item.rev
             return item.value
 
-    def set(self, path, value):
+    def set(self, key_path, value):
         """
         set a value, BUT check if you have the latest revision.
         """
@@ -87,31 +143,37 @@ class DoozerData():
             raise TypeError('Keywords for this object must be strings. You supplied %s' % type(value))
 
         rev = 0
-        if path in self.revisions:
-            rev = self.revisions[path]
-        self._set(path, value, rev)
+        if key_path in self.revisions:
+            rev = self.revisions[key_path]
+        self._set(key_path, value, rev)
 
-    def _set(self, path, value, rev):
+    def _set(self, key_path, value, rev):
         try:
-            newrev = self.client.set(self.folder(path), value, rev)
-            print newrev
-            self.revisions[path] = newrev.rev
+            newrev = self.client.set(self.folder(key_path), value, rev)
+            self.revisions[key_path] = newrev.rev
+            print self.revisions[key_path]
+            print 'setting %s with rev %s oldrev %s' % (key_path, newrev.rev, rev)
         except RevMismatch:
-            print 'failed to set %s %s %s' % (path, value, rev)
+            print 'ERROR failed to set %s %s %s' % (key_path, rev, self.revisions[key_path])
 
-    def folder(self, path):
-        return "%s/%s" % (self._folder, path)
+    def key_path(self, path):
+        return path.split('/')[-1]
 
-    def delete(self, path):
+    def folder(self, key_path):
+        return "%s/%s" % (self._folder, key_path)
+
+    def delete(self, key_path):
         """
         delete path. only with correct latest revision.
         """
         try:
-            rev = self.revisions[path]
-            item = self.client.delete(self.folder(path), rev)
+            rev = self.revisions[key_path]
+            self.revisions.pop(key_path)
+            item = self.client.delete(self.folder(key_path), rev)
         except RevMismatch:
-            item = self.client.delete(self.folder(path))
-            print 'value changed meanwhile!!', item.path, item.value
+            print 'ERROR!! rev value changed meanwhile!!', item.path, item.value
+        except BadPath:
+            print 'ERROR!! path is bad.', self.folder(key_path)
 
     def delete_all(self):
         """ clear all data.
@@ -138,16 +200,14 @@ class DoozerData():
             print 'we are empty'
             folder = []
 
-        result = []
         for thing in folder:
             item = self.client.get(self.folder(thing.path))
-            result.append((thing.path, item.rev, item.value))
+            yield (thing.path, item.rev, item.value)
 
-        return result
 
-def print_change(change):
+def print_change(change, destroy=True):
     print 'watched a change..'
-    print  change
+    print  change, destroy
 
 def change_value(d):
 
@@ -163,11 +223,9 @@ def test_doozerdata():
 
     client = doozer.connect()
     d = DoozerData(client, callback=print_change)
-    print '...'
     d.set('foo1', 'bar1')
     d.set('foo2', 'bar2')
     d.set('foo3', 'bar3')
-    print '...'
     #create a second client
 
     client2 = doozer.connect()
@@ -198,8 +256,10 @@ def test_doozerdata():
     for dii in d2.items():
         print dii
     # there is content. in both instances.
-    # because the change_value job adds data later..
+    # because the change_value job adds data later.
     cv.join(cv)
     d.delete_all()
 
-test_doozerdata()
+if __name__ == '__main__': 
+    test_doozerdata()
+
