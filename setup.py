@@ -9,6 +9,6 @@ setup(
     author_email='jeff.lindsay@twilio.com',
     description='doozer client',
     packages=['doozer'],
-    install_requires=['gevent'],
+    install_requires=['gevent', 'protobuf'],
     data_files=[],
 )
