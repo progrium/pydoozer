@@ -4,7 +4,6 @@ import struct
 import gevent
 import gevent.event
 import gevent.socket
-import google.protobuf.message
 
 from msg_pb2 import Response
 from msg_pb2 import Request
