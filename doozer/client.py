@@ -11,7 +11,7 @@ from msg_pb2 import Request
 
 CONNECT_TIMEOUT = 5.0
 REQUEST_TIMEOUT = 2.0
-DEFAULT_URI = "doozerd:?%s" % "&".join([
+DEFAULT_URI = "doozer:?%s" % "&".join([
     "ca=127.0.0.1:8046",
     "ca=127.0.0.1:8041",
     "ca=127.0.0.1:8042",
@@ -63,7 +63,7 @@ def pb_dict(message):
 
 def parse_uri(uri):
     """Parse the doozerd URI scheme to get node addresses"""
-    if uri.startswith("doozerd:?"):
+    if uri.startswith("doozer:?"):
         before, params = uri.split("?", 1)
         addrs = []
         for param in params.split("&"):
