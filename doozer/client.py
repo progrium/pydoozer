@@ -137,8 +137,10 @@ class Connection(object):
             addrs_left = len(self.addrs)
             while addrs_left:
                 try:
-                    host, port = self.addrs[self.addrs_index].split(':')
+                    parts = self.addrs[self.addrs_index].split(':')
                     self.addrs_index = (self.addrs_index + 1) % len(self.addrs)
+                    host = parts[0]
+                    port = parts[1] if len(parts) > 1 else 8046
                     self.address = "%s:%s" % (host, port)
                     self._logger.debug('Connecting to %s...', self.address)
                     self.sock = gevent.socket.create_connection((host, int(port)),
