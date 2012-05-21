@@ -1,3 +1,4 @@
+import logging
 import os
 import struct
 
@@ -83,6 +84,9 @@ def connect(uri=None):
 
 class Connection(object):
     def __init__(self, addrs=None):
+        self._logger = logging.getLogger('pydoozer.Connection')
+        self._logger.debug('__init__(%s)', addrs)
+
         if addrs is None:
             addrs = []
         self.addrs = addrs
@@ -96,23 +100,37 @@ class Connection(object):
         self.reconnect()
     
     def reconnect(self):
+        self._logger.debug('reconnect()')
+
         self.disconnect()
         for retry in range(5):
             addrs = list(self.addrs)
+            # TODO (beaufour): randomize list so it doesn't always connect to the
+            # same daemon? Or at least not the one it just failed connecting to.
             while len(addrs):
                 try:
                     host, port = addrs.pop(0).split(':')
                     self.address = "%s:%s" % (host, port)
+                    self._logger.debug('Connecting to %s...', self.address)
+                    # TODO (beaufour): it should be possible to set a
+                    # timeout. In a sane setup, you should be able to
+                    # set a very agressive one.
                     self.sock = gevent.socket.create_connection((host, int(port)))
+                    self._logger.debug('Connection successful')
                     self.ready.set()
                     self.loop = _spawner(self._recv_loop)
                     return
-                except IOError:
+                except IOError, e:
+                    self._logger.warning('Failed to connect to %s (%s)', self.address, e)
                     pass
             gevent.sleep(retry * 2)
+
+        self._logger.error('Could not connect to any of the defined addresses')
         raise ConnectError("Can't connect to any of the addresses: %s" % self.addrs)
     
     def disconnect(self):
+        self._logger.debug('disconnect()')
+
         if self.loop:
             self.loop.kill()
         if self.sock:
@@ -126,17 +144,22 @@ class Connection(object):
             request.tag %= 2**31
         self.pending[request.tag] = gevent.event.AsyncResult()
         data = request.SerializeToString()
-        head = struct.pack(">I", len(data))
+        data_len = len(data)
+        head = struct.pack(">I", data_len)
         packet = ''.join([head, data])
+        self._logger.debug('Sending packet, tag: %d, len: %d', request.tag, data_len)
         try:
             self.ready.wait(timeout=2)
             self.sock.send(packet)
         except IOError, e:
+            self._logger.warning('Error sending packet (%s)', e)
             self.reconnect()
             if retry:
+                self._logger.debug('Retrying sending packet')
                 self.ready.wait()
                 self.sock.send(packet)
             else:
+                self._logger.warning('Failed retrying to send packet')
                 raise e
         response = self.pending[request.tag].get(timeout=REQUEST_TIMEOUT)
         del self.pending[request.tag]
@@ -146,6 +169,8 @@ class Connection(object):
         return response
     
     def _recv_loop(self):
+        self._logger.debug('_recv_loop(%s)', self.address)
+
         while True:
             try:
                 head = self.sock.recv(4)
@@ -153,14 +178,20 @@ class Connection(object):
                 data = self.sock.recv(length)
                 response = Response()
                 response.ParseFromString(data)
+                self._logger.debug('Received packet, tag: %d, len: %d', response.tag, length)
                 if response.tag in self.pending:
                     self.pending[response.tag].set(response)
             except struct.error, e:
+                self._logger.warning('Got invalid packet from server (%s)', e)
                 # If some extra bytes are sent, just reconnect. 
                 # This is related to this bug: 
                 # https://github.com/ha/doozerd/issues/5
+
                 self.reconnect()
             except IOError, e:
+                self._logger.warning('Lost connection? (%s)', e)
+                # Note: .reconnect() will kill this greenlet, and
+                # start a new one
                 self.reconnect()
                 
 
