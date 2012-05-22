@@ -10,7 +10,6 @@ import gevent.socket
 from msg_pb2 import Response
 from msg_pb2 import Request
 
-CONNECT_TIMEOUT = 5.0
 REQUEST_TIMEOUT = 2.0
 
 DEFAULT_RETRY_WAIT = 2.0
