@@ -91,6 +91,9 @@ class Connection(object):
         if addrs is None:
             addrs = []
         self.addrs = addrs
+        self.addrs_index = 0
+        """Next address to connect to in self.addrs"""
+
         self.pending = {}
         self.loop = None
         self.sock = None
@@ -114,13 +117,13 @@ class Connection(object):
         self._logger.debug('reconnect()')
 
         self.disconnect(kill_loop)
+
         for retry in range(5):
-            addrs = list(self.addrs)
-            # TODO (beaufour): keep a pointer to last connection made,
-            # and take the next in the list
-            while len(addrs):
+            addrs_left = len(self.addrs)
+            while addrs_left:
                 try:
-                    host, port = addrs.pop(0).split(':')
+                    host, port = self.addrs[self.addrs_index].split(':')
+                    self.addrs_index = (self.addrs_index + 1) % len(self.addrs)
                     self.address = "%s:%s" % (host, port)
                     self._logger.debug('Connecting to %s...', self.address)
                     # TODO (beaufour): it should be possible to set a
@@ -131,9 +134,12 @@ class Connection(object):
                     self.ready.set()
                     self.loop = _spawner(self._recv_loop)
                     return
+
                 except IOError, e:
                     self._logger.warning('Failed to connect to %s (%s)', self.address, e)
                     pass
+                addrs_left -= 1
+
             gevent.sleep(retry * 2)
 
         self._logger.error('Could not connect to any of the defined addresses')
