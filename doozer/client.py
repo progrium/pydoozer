@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 import struct
 
 import gevent
@@ -95,6 +96,10 @@ class Connection(object):
         self.sock = None
         self.address = None
         self.ready = gevent.event.Event()
+
+        # Shuffle the addresses so all clients don't connect to the
+        # same node in the cluster.
+        random.shuffle(addrs)
     
     def connect(self):
         self.reconnect()
@@ -111,8 +116,8 @@ class Connection(object):
         self.disconnect(kill_loop)
         for retry in range(5):
             addrs = list(self.addrs)
-            # TODO (beaufour): randomize list so it doesn't always connect to the
-            # same daemon? Or at least not the one it just failed connecting to.
+            # TODO (beaufour): keep a pointer to last connection made,
+            # and take the next in the list
             while len(addrs):
                 try:
                     host, port = addrs.pop(0).split(':')
