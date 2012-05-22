@@ -75,16 +75,25 @@ def parse_uri(uri):
     else:
         raise ValueError("invalid doozerd uri")
 
-def connect(uri=None):
-    """Start a Doozer client connection"""
+def connect(uri=None, timeout=None):
+    """
+    Start a Doozer client connection
+
+    @param uri: str|None, Doozer URI
+    @param timeout: float|None, connection timeout in seconds (per address)
+    """
+
     uri = uri or os.environ.get("DOOZER_URI", DEFAULT_URI)
     addrs = parse_uri(uri)
     if not addrs:
         raise ValueError("there were no addrs supplied in the uri (%s)" % uri)
-    return Client(addrs)
+    return Client(addrs, timeout)
 
 class Connection(object):
-    def __init__(self, addrs=None):
+    def __init__(self, addrs=None, timeout=None):
+        """
+        @param timeout: float|None, connection timeout in seconds (per address)
+        """
         self._logger = logging.getLogger('pydoozer.Connection')
         self._logger.debug('__init__(%s)', addrs)
 
@@ -98,6 +107,7 @@ class Connection(object):
         self.loop = None
         self.sock = None
         self.address = None
+        self.timeout = timeout
         self.ready = gevent.event.Event()
 
         # Shuffle the addresses so all clients don't connect to the
@@ -126,11 +136,13 @@ class Connection(object):
                     self.addrs_index = (self.addrs_index + 1) % len(self.addrs)
                     self.address = "%s:%s" % (host, port)
                     self._logger.debug('Connecting to %s...', self.address)
-                    # TODO (beaufour): it should be possible to set a
-                    # timeout. In a sane setup, you should be able to
-                    # set a very agressive one.
-                    self.sock = gevent.socket.create_connection((host, int(port)))
+                    self.sock = gevent.socket.create_connection((host, int(port)),
+                                                                timeout=self.timeout)
                     self._logger.debug('Connection successful')
+
+                    # Reset the timeout on the connection so it
+                    # doesn't make .recv() and .send() timeout.
+                    self.sock.settimeout(None)
                     self.ready.set()
                     self.loop = _spawner(self._recv_loop)
                     return
@@ -140,7 +152,9 @@ class Connection(object):
                     pass
                 addrs_left -= 1
 
-            gevent.sleep(retry * 2)
+            sleep_time = retry * 2
+            self._logger.debug('Waiting %d seconds to reconnect', sleep_time)
+            gevent.sleep(sleep_time)
 
         self._logger.error('Could not connect to any of the defined addresses')
         raise ConnectError("Can't connect to any of the addresses: %s" % self.addrs)
@@ -225,10 +239,13 @@ class Connection(object):
                 
 
 class Client(object):
-    def __init__(self, addrs=None):
+    def __init__(self, addrs=None, timeout=None):
+        """
+        @param timeout: float|None, connection timeout in seconds (per address)
+        """
         if addrs is None:
             addrs = []
-        self.connection = Connection(addrs)
+        self.connection = Connection(addrs, timeout)
         self.connect()
     
     def rev(self):
