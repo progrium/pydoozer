@@ -99,10 +99,16 @@ class Connection(object):
     def connect(self):
         self.reconnect()
     
-    def reconnect(self):
+    def reconnect(self, kill_loop=True):
+        """
+        Reconnect to the cluster.
+
+        @param kill_loop: bool, kill the current receive loop
+        """
+
         self._logger.debug('reconnect()')
 
-        self.disconnect()
+        self.disconnect(kill_loop)
         for retry in range(5):
             addrs = list(self.addrs)
             # TODO (beaufour): randomize list so it doesn't always connect to the
@@ -128,14 +134,26 @@ class Connection(object):
         self._logger.error('Could not connect to any of the defined addresses')
         raise ConnectError("Can't connect to any of the addresses: %s" % self.addrs)
     
-    def disconnect(self):
+    def disconnect(self, kill_loop=True):
+        """
+        Disconnect current connection.
+
+        @param kill_loop: bool, Kill the current receive loop
+        """
         self._logger.debug('disconnect()')
 
-        if self.loop:
+        if kill_loop and self.loop:
+            self._logger.debug('killing loop')
             self.loop.kill()
+            self.loop = None
         if self.sock:
+            self._logger.debug('closing connection')
             self.sock.close()
+            self.sock = None
+
+        self._logger.debug('clearing ready signal')
         self.ready.clear()
+        self.address = None
     
     def send(self, request, retry=True):
         request.tag = 0
@@ -186,13 +204,13 @@ class Connection(object):
                 # If some extra bytes are sent, just reconnect. 
                 # This is related to this bug: 
                 # https://github.com/ha/doozerd/issues/5
-
-                self.reconnect()
+                break
             except IOError, e:
                 self._logger.warning('Lost connection? (%s)', e)
-                # Note: .reconnect() will kill this greenlet, and
-                # start a new one
-                self.reconnect()
+                break
+
+        # Note: .reconnect() will spawn a new loop
+        self.reconnect(kill_loop=False)
                 
 
 class Client(object):
