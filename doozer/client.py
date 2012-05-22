@@ -12,6 +12,10 @@ from msg_pb2 import Request
 
 CONNECT_TIMEOUT = 5.0
 REQUEST_TIMEOUT = 2.0
+
+DEFAULT_RETRY_WAIT = 2.0
+"""Default connection retry waiting time (seconds)"""
+
 DEFAULT_URI = "doozer:?%s" % "&".join([
     "ca=127.0.0.1:8046",
     "ca=127.0.0.1:8041",
@@ -128,6 +132,8 @@ class Connection(object):
 
         self.disconnect(kill_loop)
 
+        # Default to the socket timeout
+        retry_wait = self.timeout or gevent.socket.getdefaulttimeout() or DEFAULT_RETRY_WAIT
         for retry in range(5):
             addrs_left = len(self.addrs)
             while addrs_left:
@@ -152,9 +158,9 @@ class Connection(object):
                     pass
                 addrs_left -= 1
 
-            sleep_time = retry * 2
-            self._logger.debug('Waiting %d seconds to reconnect', sleep_time)
-            gevent.sleep(sleep_time)
+            self._logger.debug('Waiting %d seconds to reconnect', retry_wait)
+            gevent.sleep(retry_wait)
+            retry_wait *= 2
 
         self._logger.error('Could not connect to any of the defined addresses')
         raise ConnectError("Can't connect to any of the addresses: %s" % self.addrs)
