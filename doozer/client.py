@@ -151,6 +151,11 @@ class Connection(object):
                     # doesn't make .recv() and .send() timeout.
                     self.sock.settimeout(None)
                     self.ready.set()
+
+                    # Any commands that were in transit when the
+                    # connection was lost is obviously not getting a
+                    # reply. Retransmit them.
+                    self._retransmit_pending()
                     self.loop = _spawner(self._recv_loop)
                     return
 
@@ -192,12 +197,34 @@ class Connection(object):
         while request.tag in self.pending:
             request.tag += 1
             request.tag %= 2**31
-        self.pending[request.tag] = gevent.event.AsyncResult()
+
+        # Create and send request
         data = request.SerializeToString()
         data_len = len(data)
         head = struct.pack(">I", data_len)
         packet = ''.join([head, data])
+        entry = self.pending[request.tag] = {
+            'event': gevent.event.AsyncResult(),
+            'packet': packet,
+        }
         self._logger.debug('Sending packet, tag: %d, len: %d', request.tag, data_len)
+        self._send_pack(packet, retry)
+
+        # Wait for response
+        response = entry['event'].get(timeout=REQUEST_TIMEOUT)
+        del self.pending[request.tag]
+        exception = response_exception(response)
+        if exception:
+            raise exception(response, request)
+        return response
+
+    def _send_pack(self, packet, retry=True):
+        """
+        Send the given packet to the currently connected node.
+
+        @param packet: struct, packet to send
+        @param retry: bool, retry the sending once
+        """
         try:
             self.ready.wait(timeout=2)
             self.sock.send(packet)
@@ -211,13 +238,7 @@ class Connection(object):
             else:
                 self._logger.warning('Failed retrying to send packet')
                 raise e
-        response = self.pending[request.tag].get(timeout=REQUEST_TIMEOUT)
-        del self.pending[request.tag]
-        exception = response_exception(response)
-        if exception:
-            raise exception(response, request)
-        return response
-    
+
     def _recv_loop(self):
         self._logger.debug('_recv_loop(%s)', self.address)
 
@@ -230,7 +251,7 @@ class Connection(object):
                 response.ParseFromString(data)
                 self._logger.debug('Received packet, tag: %d, len: %d', response.tag, length)
                 if response.tag in self.pending:
-                    self.pending[response.tag].set(response)
+                    self.pending[response.tag]['event'].set(response)
             except struct.error, e:
                 self._logger.warning('Got invalid packet from server (%s)', e)
                 # If some extra bytes are sent, just reconnect. 
@@ -243,7 +264,21 @@ class Connection(object):
 
         # Note: .reconnect() will spawn a new loop
         self.reconnect(kill_loop=False)
-                
+
+    def _retransmit_pending(self):
+        """
+        Retransmits all pending packets.
+        """
+
+        for i in xrange(0, len(self.pending)):
+            self._logger.debug('Retransmitting packet')
+            try:
+                self._send_pack(self.pending[i]['packet'], retry=False)
+            except Exception:
+                # If we can't even retransmit the package, we give
+                # up. The consumer will timeout.
+                logging.warning('Got exception retransmitting package')
+
 
 class Client(object):
     def __init__(self, addrs=None, timeout=None):
