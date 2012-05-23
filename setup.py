@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name='PyDoozer',
-    version='0.1.0',
+    version='0.2.0',
     author='Jeff Lindsay',
     author_email='jeff.lindsay@twilio.com',
     description='doozer client',
