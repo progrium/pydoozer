@@ -160,7 +160,7 @@ class Connection(object):
                     return
 
                 except IOError, e:
-                    self._logger.warning('Failed to connect to %s (%s)', self.address, e)
+                    self._logger.info('Failed to connect to %s (%s)', self.address, e)
                     pass
                 addrs_left -= 1
 
