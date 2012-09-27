@@ -214,23 +214,30 @@ class Connection(object):
             'packet': packet,
         }
         self._logger.debug('Sending packet, tag: %d, len: %d', request.tag, data_len)
-        self._send_pack(packet, retry)
-
-        # Wait for response
         try:
-            response = entry['event'].get(timeout=REQUEST_TIMEOUT)
-        except gevent.timeout.Timeout:
-            if retry:
-                # If we get a timeout (which is conservatively high),
-                # something is probably wrong with the
-                # connection/instance so reconnect to the
-                # cluster. This will trigger a retransmit of the
-                # packages in transit.
-                logging.debug('Got timeout on receive, triggering reconnect()')
-                self.reconnect()
-                response = entry['event'].get(timeout=REQUEST_TIMEOUT)
+            self._send_pack(packet, retry)
 
-        del self.pending[request.tag]
+            # Wait for response
+            try:
+                response = entry['event'].get(timeout=REQUEST_TIMEOUT)
+            except gevent.timeout.Timeout:
+                if retry:
+                    # If we get a timeout (which is conservatively high),
+                    # something is probably wrong with the
+                    # connection/instance so reconnect to the
+                    # cluster. This will trigger a retransmit of the
+                    # packages in transit.
+                    logging.debug('Got timeout on receive, triggering reconnect()')
+                    self.reconnect()
+                    response = entry['event'].get(timeout=REQUEST_TIMEOUT)
+
+        except Exception:
+            raise
+        finally:
+            # We want to ensure that we always clear the pending
+            # request, since nothing is now waiting for the answer.
+            del self.pending[request.tag]
+
         exception = response_exception(response)
         if exception:
             raise exception(response, request)
