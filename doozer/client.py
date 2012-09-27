@@ -24,6 +24,7 @@ DEFAULT_URI = "doozer:?%s" % "&".join([
 
 _spawner = gevent.spawn
 
+
 class ConnectError(Exception): pass
 class ResponseError(Exception):
     def __init__(self, response, request):
@@ -47,6 +48,7 @@ class NotDirectory(ResponseError): pass
 class IsDirectory(ResponseError): pass
 class NoEntity(ResponseError): pass
 
+
 def response_exception(response):
     """Takes a response, returns proper exception if it has an error code"""
     exceptions = {
@@ -61,9 +63,11 @@ def response_exception(response):
     else:
         return None
 
+
 def pb_dict(message):
     """Create dict representation of a protobuf message"""
     return dict([(field.name, value) for field, value in message.ListFields()])
+
 
 def parse_uri(uri):
     """Parse the doozerd URI scheme to get node addresses"""
@@ -78,6 +82,7 @@ def parse_uri(uri):
     else:
         raise ValueError("invalid doozerd uri")
 
+
 def connect(uri=None, timeout=None):
     """
     Start a Doozer client connection
@@ -91,6 +96,7 @@ def connect(uri=None, timeout=None):
     if not addrs:
         raise ValueError("there were no addrs supplied in the uri (%s)" % uri)
     return Client(addrs, timeout)
+
 
 class Connection(object):
     def __init__(self, addrs=None, timeout=None):
