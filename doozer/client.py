@@ -31,7 +31,7 @@ class ResponseError(Exception):
         self.detail = response.err_detail
         self.response = response
         self.request = request
-    
+
     def __str__(self):
         return str(pb_dict(self.request))
 
@@ -116,10 +116,10 @@ class Connection(object):
         # Shuffle the addresses so all clients don't connect to the
         # same node in the cluster.
         random.shuffle(addrs)
-    
+
     def connect(self):
         self.reconnect()
-    
+
     def reconnect(self, kill_loop=True):
         """
         Reconnect to the cluster.
@@ -170,7 +170,7 @@ class Connection(object):
 
         self._logger.error('Could not connect to any of the defined addresses')
         raise ConnectError("Can't connect to any of the addresses: %s" % self.addrs)
-    
+
     def disconnect(self, kill_loop=True):
         """
         Disconnect current connection.
@@ -191,7 +191,7 @@ class Connection(object):
         self._logger.debug('clearing ready signal')
         self.ready.clear()
         self.address = None
-    
+
     def send(self, request, retry=True):
         request.tag = 0
         while request.tag in self.pending:
@@ -289,52 +289,52 @@ class Client(object):
             addrs = []
         self.connection = Connection(addrs, timeout)
         self.connect()
-    
+
     def rev(self):
         request = Request(verb=Request.REV)
         return self.connection.send(request)
-        
+
     def set(self, path, value, rev):
         request = Request(path=path, value=value, rev=rev, verb=Request.SET)
         return self.connection.send(request, retry=False)
-        
+
     def get(self, path, rev=None):
         request = Request(path=path, verb=Request.GET)
         if rev:
             request.rev = rev
         return self.connection.send(request)
-    
+
     def delete(self, path, rev):
         request = Request(path=path, rev=rev, verb=Request.DEL)
         return self.connection.send(request, retry=False)
-    
+
     def wait(self, path, rev):
         request = Request(path=path, rev=rev, verb=Request.WAIT)
         return self.connection.send(request)
-    
+
     def stat(self, path, rev):
         request = Request(path=path, rev=rev, verb=Request.STAT)
         return self.connection.send(request)
-    
+
     def access(self, secret):
         request = Request(value=secret, verb=Request.ACCESS)
         return self.connection.send(request)
-    
+
     def _getdir(self, path, offset=0, rev=None):
         request = Request(path=path, offset=offset, verb=Request.GETDIR)
         if rev:
             request.rev = rev
         return self.connection.send(request)
-        
+
     def _walk(self, path, offset=0, rev=None):
         request = Request(path=path, offset=offset, verb=Request.WALK)
         if rev:
             request.rev = rev
         return self.connection.send(request)
-    
+
     def watch(self, path, rev):
         raise NotImplementedError()
-    
+
     def _list(self, method, path, offset=None, rev=None):
         offset = offset or 0
         entities = []
@@ -348,15 +348,15 @@ class Client(object):
                 return entities
             else:
                 raise e
-            
+
     def walk(self, path, offset=None, rev=None):
         return self._list('_walk', path, offset, rev)
-    
+
     def getdir(self, path, offset=None, rev=None):
         return self._list('_getdir', path, offset, rev)
-    
+
     def disconnect(self):
         self.connection.disconnect()
-    
+
     def connect(self):
         self.connection.connect()
