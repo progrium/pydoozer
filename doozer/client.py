@@ -217,7 +217,19 @@ class Connection(object):
         self._send_pack(packet, retry)
 
         # Wait for response
-        response = entry['event'].get(timeout=REQUEST_TIMEOUT)
+        try:
+            response = entry['event'].get(timeout=REQUEST_TIMEOUT)
+        except gevent.timeout.Timeout:
+            if retry:
+                # If we get a timeout (which is conservatively high),
+                # something is probably wrong with the
+                # connection/instance so reconnect to the
+                # cluster. This will trigger a retransmit of the
+                # packages in transit.
+                logging.debug('Got timeout on receive, triggering reconnect()')
+                self.reconnect()
+                response = entry['event'].get(timeout=REQUEST_TIMEOUT)
+
         del self.pending[request.tag]
         exception = response_exception(response)
         if exception:
