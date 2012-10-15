@@ -1,10 +1,10 @@
 # PyDoozer
 
-A Python client for [Doozer](https://github.com/ha/doozerd) using gevent. 
+A Python client for [Doozer](https://github.com/ha/doozerd) using gevent.
 
 ## Status
 
-Still quite early.
+Still quite early (but is running in production in at least one place :) )
 
 ## Todo
 
@@ -17,6 +17,7 @@ Still quite early.
 
  * Jeff Lindsay <progrium@twilio.com>
  * Neuman Vong <neuman@twilio.com>
+ * Allan Beaufour [beaufour](http://github.com/beaufour) / <allan@chartbeat.com>
 
 ## License
 

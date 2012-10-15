@@ -24,6 +24,7 @@ DEFAULT_URI = "doozer:?%s" % "&".join([
 
 _spawner = gevent.spawn
 
+
 class ConnectError(Exception): pass
 class ResponseError(Exception):
     def __init__(self, response, request):
@@ -31,7 +32,7 @@ class ResponseError(Exception):
         self.detail = response.err_detail
         self.response = response
         self.request = request
-    
+
     def __str__(self):
         return str(pb_dict(self.request))
 
@@ -47,6 +48,7 @@ class NotDirectory(ResponseError): pass
 class IsDirectory(ResponseError): pass
 class NoEntity(ResponseError): pass
 
+
 def response_exception(response):
     """Takes a response, returns proper exception if it has an error code"""
     exceptions = {
@@ -61,9 +63,11 @@ def response_exception(response):
     else:
         return None
 
+
 def pb_dict(message):
     """Create dict representation of a protobuf message"""
     return dict([(field.name, value) for field, value in message.ListFields()])
+
 
 def parse_uri(uri):
     """Parse the doozerd URI scheme to get node addresses"""
@@ -78,6 +82,7 @@ def parse_uri(uri):
     else:
         raise ValueError("invalid doozerd uri")
 
+
 def connect(uri=None, timeout=None):
     """
     Start a Doozer client connection
@@ -91,6 +96,7 @@ def connect(uri=None, timeout=None):
     if not addrs:
         raise ValueError("there were no addrs supplied in the uri (%s)" % uri)
     return Client(addrs, timeout)
+
 
 class Connection(object):
     def __init__(self, addrs=None, timeout=None):
@@ -116,10 +122,10 @@ class Connection(object):
         # Shuffle the addresses so all clients don't connect to the
         # same node in the cluster.
         random.shuffle(addrs)
-    
+
     def connect(self):
         self.reconnect()
-    
+
     def reconnect(self, kill_loop=True):
         """
         Reconnect to the cluster.
@@ -170,7 +176,7 @@ class Connection(object):
 
         self._logger.error('Could not connect to any of the defined addresses')
         raise ConnectError("Can't connect to any of the addresses: %s" % self.addrs)
-    
+
     def disconnect(self, kill_loop=True):
         """
         Disconnect current connection.
@@ -191,7 +197,7 @@ class Connection(object):
         self._logger.debug('clearing ready signal')
         self.ready.clear()
         self.address = None
-    
+
     def send(self, request, retry=True):
         request.tag = 0
         while request.tag in self.pending:
@@ -208,11 +214,30 @@ class Connection(object):
             'packet': packet,
         }
         self._logger.debug('Sending packet, tag: %d, len: %d', request.tag, data_len)
-        self._send_pack(packet, retry)
+        try:
+            self._send_pack(packet, retry)
 
-        # Wait for response
-        response = entry['event'].get(timeout=REQUEST_TIMEOUT)
-        del self.pending[request.tag]
+            # Wait for response
+            try:
+                response = entry['event'].get(timeout=REQUEST_TIMEOUT)
+            except gevent.timeout.Timeout:
+                if retry:
+                    # If we get a timeout (which is conservatively high),
+                    # something is probably wrong with the
+                    # connection/instance so reconnect to the
+                    # cluster. This will trigger a retransmit of the
+                    # packages in transit.
+                    logging.debug('Got timeout on receive, triggering reconnect()')
+                    self.reconnect()
+                    response = entry['event'].get(timeout=REQUEST_TIMEOUT)
+
+        except Exception:
+            raise
+        finally:
+            # We want to ensure that we always clear the pending
+            # request, since nothing is now waiting for the answer.
+            del self.pending[request.tag]
+
         exception = response_exception(response)
         if exception:
             raise exception(response, request)
@@ -289,52 +314,52 @@ class Client(object):
             addrs = []
         self.connection = Connection(addrs, timeout)
         self.connect()
-    
+
     def rev(self):
         request = Request(verb=Request.REV)
         return self.connection.send(request)
-        
+
     def set(self, path, value, rev):
         request = Request(path=path, value=value, rev=rev, verb=Request.SET)
         return self.connection.send(request, retry=False)
-        
+
     def get(self, path, rev=None):
         request = Request(path=path, verb=Request.GET)
         if rev:
             request.rev = rev
         return self.connection.send(request)
-    
+
     def delete(self, path, rev):
         request = Request(path=path, rev=rev, verb=Request.DEL)
         return self.connection.send(request, retry=False)
-    
+
     def wait(self, path, rev):
         request = Request(path=path, rev=rev, verb=Request.WAIT)
         return self.connection.send(request)
-    
+
     def stat(self, path, rev):
         request = Request(path=path, rev=rev, verb=Request.STAT)
         return self.connection.send(request)
-    
+
     def access(self, secret):
         request = Request(value=secret, verb=Request.ACCESS)
         return self.connection.send(request)
-    
+
     def _getdir(self, path, offset=0, rev=None):
         request = Request(path=path, offset=offset, verb=Request.GETDIR)
         if rev:
             request.rev = rev
         return self.connection.send(request)
-        
+
     def _walk(self, path, offset=0, rev=None):
         request = Request(path=path, offset=offset, verb=Request.WALK)
         if rev:
             request.rev = rev
         return self.connection.send(request)
-    
+
     def watch(self, path, rev):
         raise NotImplementedError()
-    
+
     def _list(self, method, path, offset=None, rev=None):
         offset = offset or 0
         entities = []
@@ -348,15 +373,15 @@ class Client(object):
                 return entities
             else:
                 raise e
-            
+
     def walk(self, path, offset=None, rev=None):
         return self._list('_walk', path, offset, rev)
-    
+
     def getdir(self, path, offset=None, rev=None):
         return self._list('_getdir', path, offset, rev)
-    
+
     def disconnect(self):
         self.connection.disconnect()
-    
+
     def connect(self):
         self.connection.connect()
